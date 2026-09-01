@@ -6,6 +6,7 @@
       <SearchBar />
       <LeagueFilters />
     </div>
+    <ResultsSummary />
     <LeagueList />
   </main>
 </template>
@@ -14,6 +15,7 @@
 import { onMounted } from 'vue'
 import LeagueFilters from '@/components/LeagueFilters.vue'
 import LeagueList from '@/components/LeagueList.vue'
+import ResultsSummary from '@/components/ResultsSummary.vue'
 import SearchBar from '@/components/SearchBar.vue'
 import { useLeaguesStore } from '@/stores/leagues'
 

@@ -30,6 +30,8 @@ export const useLeaguesStore = defineStore('leagues', () => {
     return [...new Set(sportsNames)].sort((left, right) => left.localeCompare(right))
   })
 
+  const hasActiveFilters = computed(() => Boolean(query.value.trim() || selectedSport.value))
+
   const filteredLeagues = computed(() => {
     const query = debouncedQuery.value.trim().toLowerCase()
 
@@ -108,6 +110,7 @@ export const useLeaguesStore = defineStore('leagues', () => {
     badges,
     selectedSport,
     uniqSports,
+    hasActiveFilters,
     filteredLeagues,
     loadLeagues,
     loadBadge,

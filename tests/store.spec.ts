@@ -2,12 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useLeaguesStore } from '@/stores/leagues'
 import * as api from '@/api/sportsdb'
+import { Statuses } from '@/types/league'
 import { FIXTURE_LEAGUES, FIXTURE_SEASONS, FIXTURE_SEASONS_NO_BADGE } from './fixtures/leagues'
 
 function seededStore() {
   const store = useLeaguesStore()
   store.leagues = [...FIXTURE_LEAGUES]
-  store.status = 'success'
+  store.status = Statuses.success
   return store
 }
 
@@ -21,7 +22,6 @@ const flushDebounce = () => vi.advanceTimersByTimeAsync(DEBOUNCE_DELAY)
 
 beforeEach(() => {
   setActivePinia(createPinia())
-  vi.restoreAllMocks()
   vi.useFakeTimers()
 })
 
@@ -30,6 +30,17 @@ afterEach(() => {
 })
 
 describe('search', () => {
+  it('applies the query only after the debounce delay', async () => {
+    const store = seededStore()
+    store.query = 'prem'
+
+    // Still unfiltered: the debounced copy has not caught up yet.
+    expect(store.filteredLeagues).toHaveLength(FIXTURE_LEAGUES.length)
+
+    await flushDebounce()
+    expect(names(store)).toEqual(['English Premier League'])
+  })
+
   it('matches substrings case-insensitively', async () => {
     const store = seededStore()
     store.query = 'prem'
@@ -88,6 +99,41 @@ describe('sport filter', () => {
   })
 })
 
+describe('clearing filters', () => {
+  it('reports an active filter for a query or a sport', async () => {
+    const store = seededStore()
+    expect(store.hasActiveFilters).toBe(false)
+
+    // Reads the undebounced query, so the flag flips on the first keystroke.
+    store.query = 'prem'
+    expect(store.hasActiveFilters).toBe(true)
+
+    store.query = '   '
+    expect(store.hasActiveFilters).toBe(false)
+
+    store.selectedSport = 'Soccer'
+    expect(store.hasActiveFilters).toBe(true)
+
+    await flushDebounce()
+  })
+
+  it('resets both filters and restores the full list', async () => {
+    const store = seededStore()
+    store.query = 'prem'
+    store.selectedSport = 'Soccer'
+    await flushDebounce()
+    expect(names(store)).toEqual(['English Premier League'])
+
+    store.clearFilters()
+    await flushDebounce()
+
+    expect(store.query).toBe('')
+    expect(store.selectedSport).toBe('')
+    expect(store.hasActiveFilters).toBe(false)
+    expect(store.filteredLeagues).toHaveLength(FIXTURE_LEAGUES.length)
+  })
+})
+
 describe('league list caching', () => {
   it('fetches once per session', async () => {
     const spy = vi.spyOn(api, 'fetchLeagues').mockResolvedValue({ leagues: FIXTURE_LEAGUES })
@@ -97,7 +143,31 @@ describe('league list caching', () => {
     await store.loadLeagues()
 
     expect(spy).toHaveBeenCalledTimes(1)
-    expect(store.status).toBe('success')
+    expect(store.status).toBe(Statuses.success)
+  })
+
+  it('does not start a second request while one is in flight', async () => {
+    const spy = vi.spyOn(api, 'fetchLeagues').mockResolvedValue({ leagues: FIXTURE_LEAGUES })
+    const store = useLeaguesStore()
+
+    // Not awaited: the second call lands while the first is still in flight.
+    const first = store.loadLeagues()
+    expect(store.status).toBe(Statuses.loading)
+    const second = store.loadLeagues()
+
+    await Promise.all([first, second])
+
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats a null payload as an empty list', async () => {
+    vi.spyOn(api, 'fetchLeagues').mockResolvedValue({ leagues: null })
+    const store = useLeaguesStore()
+
+    await store.loadLeagues()
+
+    expect(store.leagues).toEqual([])
+    expect(store.status).toBe(Statuses.success)
   })
 
   it('records an error state with its message on failure', async () => {
@@ -106,8 +176,32 @@ describe('league list caching', () => {
 
     await store.loadLeagues()
 
-    expect(store.status).toBe('error')
+    expect(store.status).toBe(Statuses.error)
     expect(store.error).toBe('network down')
+  })
+
+  it('falls back to a generic message when the rejection is not an Error', async () => {
+    vi.spyOn(api, 'fetchLeagues').mockImplementation(() => Promise.reject('kaboom'))
+    const store = useLeaguesStore()
+
+    await store.loadLeagues()
+
+    expect(store.error).toBe('Something went wrong')
+  })
+
+  it('retries after a failure and clears the error', async () => {
+    const spy = vi.spyOn(api, 'fetchLeagues').mockRejectedValue(new Error('network down'))
+    const store = useLeaguesStore()
+
+    await store.loadLeagues()
+    expect(store.status).toBe(Statuses.error)
+
+    spy.mockResolvedValue({ leagues: FIXTURE_LEAGUES })
+    await store.loadLeagues()
+
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(store.status).toBe(Statuses.success)
+    expect(store.error).toBeNull()
   })
 
   it('refetches once the TTL has elapsed', async () => {
@@ -129,14 +223,14 @@ describe('badge cache', () => {
 
     // Not awaited: the second call lands while the first is still in flight.
     const first = store.loadBadge('4328')
-    expect(store.badges.get('4328')).toEqual({ status: 'loading', url: null, season: null })
+    expect(store.badges.get('4328')).toEqual({ status: Statuses.loading, url: null, season: null })
     const second = store.loadBadge('4328')
 
     await Promise.all([first, second])
 
     expect(spy).toHaveBeenCalledTimes(1)
     expect(store.badges.get('4328')).toEqual({
-      status: 'success',
+      status: Statuses.success,
       url: 'https://example.test/badge-93.png',
       season: '1993-1994',
     })
@@ -158,7 +252,7 @@ describe('badge cache', () => {
 
     await store.loadBadge('5555')
 
-    expect(store.badges.get('5555')).toEqual({ status: 'success', url: null, season: null })
+    expect(store.badges.get('5555')).toEqual({ status: Statuses.success, url: null, season: null })
   })
 
   it('caches errors but allows an explicit retry', async () => {
@@ -166,7 +260,12 @@ describe('badge cache', () => {
     const store = useLeaguesStore()
 
     await store.loadBadge('4328')
-    expect(store.badges.get('4328')).toEqual({ status: 'error', url: null, season: null, message: 'boom' })
+    expect(store.badges.get('4328')).toEqual({
+      status: Statuses.error,
+      url: null,
+      season: null,
+      message: 'boom',
+    })
 
     await store.loadBadge('4328')
     expect(spy).toHaveBeenCalledTimes(1)
@@ -174,6 +273,6 @@ describe('badge cache', () => {
     spy.mockResolvedValue({ seasons: FIXTURE_SEASONS })
     await store.retryBadge('4328')
     expect(spy).toHaveBeenCalledTimes(2)
-    expect(store.badges.get('4328')).toMatchObject({ status: 'success' })
+    expect(store.badges.get('4328')).toMatchObject({ status: Statuses.success })
   })
 })

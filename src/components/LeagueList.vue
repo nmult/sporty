@@ -1,19 +1,13 @@
 <template>
-  <div v-if="status === Statuses.idle || status === Statuses.loading" class="list__state">
-    Loading leagues…
-  </div>
+  <div v-if="isLoading" class="list__state">Loading leagues…</div>
 
-  <div v-else-if="status === Statuses.error" class="list__state list__state--error">
+  <div v-else-if="hasError" class="list__state list__state--error">
     <p>{{ error }}</p>
     <button type="button" class="list__button" @click="store.loadLeagues()">Try again</button>
   </div>
 
-  <div v-else-if="filteredLeagues.length === 0" class="list__state">
-    <p v-if="leagues.length === 0">No available leagues.</p>
-    <template v-else>
-      <p>No leagues match those filters.</p>
-      <button type="button" class="list__button" @click="store.clearFilters()">Clear filters</button>
-    </template>
+  <div v-else-if="isEmpty" class="list__state">
+    <p>{{ emptyMessage }}</p>
   </div>
 
   <div v-else class="list__grid">
@@ -22,6 +16,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import LeagueCard from '@/components/LeagueCard.vue'
 import { useLeaguesStore } from '@/stores/leagues'
@@ -29,6 +24,17 @@ import { Statuses } from '@/types/league'
 
 const store = useLeaguesStore()
 const { status, error, filteredLeagues, leagues } = storeToRefs(store)
+
+const isLoading = computed(
+  () => status.value === Statuses.idle || status.value === Statuses.loading,
+)
+const hasError = computed(() => status.value === Statuses.error)
+const isEmpty = computed(() => filteredLeagues.value.length === 0)
+
+// Nothing at all vs. nothing matching are different situations for the reader.
+const emptyMessage = computed(() =>
+  leagues.value.length === 0 ? 'No available leagues.' : 'No leagues match those filters.',
+)
 </script>
 
 <style scoped lang="scss">

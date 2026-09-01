@@ -1,29 +1,20 @@
 <template>
   <div class="badge">
-    <div v-if="!entry || entry.status === Statuses.loading" class="badge__skeleton" />
+    <div v-if="isLoading" class="badge__skeleton" />
 
-    <div v-else-if="entry.status === Statuses.error" class="badge__error">
-      <p v-if="entry.message" class="badge__error-text">{{ entry.message }}</p>
+    <div v-else-if="hasError" class="badge__error">
+      <p v-if="errorMessage" class="badge__error-text">{{ errorMessage }}</p>
       <button type="button" class="badge__retry" @click="$emit('retry')">Try again</button>
     </div>
 
-    <template v-else-if="entry.url && !imageFailed">
-      <img
-        :src="entry.url"
-        :alt="entry.season ? `Season badge for ${entry.season}` : 'Season badge'"
-        class="badge__image"
-        @error="onImageError"
-      />
-      <p class="badge__season">Season {{ entry.season }}</p>
+    <template v-else-if="showImage">
+      <img :src="imageUrl" :alt="imageAlt" class="badge__image" @error="onImageError" />
+      <p class="badge__season">Season {{ season }}</p>
     </template>
 
     <div v-else class="badge__placeholder">
       <span class="badge__placeholder-mark" aria-hidden="true">—</span>
-      <p class="badge__placeholder-text">
-        {{
-          imageFailed ? 'The badge image could not be loaded' : 'No badge available for this league'
-        }}
-      </p>
+      <p class="badge__placeholder-text">{{ placeholderText }}</p>
     </div>
   </div>
 </template>
@@ -37,6 +28,21 @@ defineEmits<{ retry: [] }>()
 
 const failedUrl = ref<string | null>(null)
 const imageFailed = computed(() => failedUrl.value !== null && failedUrl.value === props.entry?.url)
+
+const isLoading = computed(() => !props.entry || props.entry.status === Statuses.loading)
+const hasError = computed(() => props.entry?.status === Statuses.error)
+const errorMessage = computed(() => props.entry?.message ?? '')
+
+const imageUrl = computed(() => props.entry?.url ?? '')
+const season = computed(() => props.entry?.season ?? '')
+const showImage = computed(() => Boolean(imageUrl.value) && !imageFailed.value)
+const imageAlt = computed(() =>
+  season.value ? `Season badge for ${season.value}` : 'Season badge',
+)
+
+const placeholderText = computed(() =>
+  imageFailed.value ? 'The badge image could not be loaded' : 'No badge available for this league',
+)
 
 function onImageError() {
   failedUrl.value = props.entry?.url ?? null
