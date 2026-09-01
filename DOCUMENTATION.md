@@ -11,6 +11,7 @@ src/
 ├── components/
 │   ├── SearchBar.vue          # Name filter input
 │   ├── LeagueFilters.vue      # Sport dropdown, options derived from data
+│   ├── ResultsSummary.vue     # Result count and active-filter reset
 │   ├── LeagueList.vue         # Main container: loading / error / empty / grid
 │   ├── LeagueCard.vue         # Individual league display, click loads badge
 │   └── SeasonBadge.vue        # Season badge in its four states
@@ -38,9 +39,9 @@ src/
 
 - **Both filters are derived in one computed value.** `filteredLeagues` combines them with AND:
   sport must match exactly (empty means all), while the query must appear in `strLeague` or
-  `strLeagueAlternate`, case-insensitively. Including the alternate name means a query such as
-  "EPL" can find the English Premier League and makes the third display field useful for search
-  as well as presentation.
+  `strLeagueAlternate`, case-insensitively. `hasActiveFilters` derives whether any filter is
+  currently applied, allowing the result summary and reset behavior to stay consistent with
+  the same source of truth.
 
 - **The sport dropdown is derived from API data.** `uniqSports` is a sorted `Set` of `strSport`
   values, so the available options always reflect the leagues in the current payload rather than
@@ -70,11 +71,13 @@ src/
   The badge container reserves the same space across all states, preventing layout shift when
   an image finishes loading.
 
-- **Tests focus on the store rather than the DOM.** 13 Vitest tests cover filtering, debounce,
-  league-list TTL behavior, one badge request per league, cached negative results, and retry
-  behavior using stubbed API calls and fake timers. This keeps the suite focused on the product
-  logic with the highest behavioral risk. `npm run build` runs `vue-tsc` before the Vite
-  production build, while ESLint and Prettier provide static and formatting checks.
+- **Tests focus on store and product behavior rather than the DOM.** 21 Vitest tests cover
+  search and debounce behavior, combined filters, filter reset state, derived sport options,
+  league-list caching and TTL behavior, request deduplication, empty and error responses,
+  retry flows, badge caching, missing badges, and explicit badge retries. Stubbed API calls
+  and fake timers keep the suite fast and deterministic. `npm run build` runs `vue-tsc`
+  before the Vite production build, while ESLint and Prettier provide static and formatting
+  checks.
 
 - **AI tools: Claude Code (Anthropic).** Used to accelerate scaffolding, component
   implementation, and styling iterations. Architecture, state ownership, caching strategy,
